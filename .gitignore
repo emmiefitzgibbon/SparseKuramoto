@@ -1,0 +1,4 @@
+data/
+__pycache__/
+*.gif
+.DS_Store
