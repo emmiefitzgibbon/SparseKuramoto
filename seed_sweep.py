@@ -4,6 +4,8 @@ Metrics: steady-state and time-averaged |Δr|, |Δψ|, |Δz|,
 |Δf_drift|, |Δr_lock|, |Δr_drift| (lock/drift split matches interactive_kuramoto.py).
 Run: python seed_sweep.py
 """
+from pathlib import Path
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
@@ -13,6 +15,7 @@ from kuramoto import (
     A_fc, A_random_weights, edges_from_A, weighted_degree,
 )
 
+q = 0.08
 # sweep settings
 n_seeds = 10
 K_values = np.linspace(0, 10, 21)
@@ -187,14 +190,7 @@ def mean_std(records, key):
 # summary at K ≈ 6.25 (near default coupling)
 K_ref_idx = int(np.argmin(np.abs(K_values - 6.25)))
 K_ref = K_values[K_ref_idx]
-print(f'\nat K≈{K_ref:.2f} (mean ± std over {n_seeds} seeds):')
-header = (
-    f"{'graph':<22} {'method':<20} {'|Δr| ss':>10} {'⟨|Δr|⟩':>10} "
-    f"{'|Δψ|° ss':>10} {'⟨|Δψ|°⟩':>10} {'⟨|Δz|⟩':>10} "
-    f"{'|Δf_d| ss':>10} {'⟨|Δr_l|⟩':>10} {'⟨|Δr_d|⟩':>10}"
-)
-print(header)
-print('-' * len(header))
+
 for gname in graphs:
     for method in methods:
         rs_m, rs_s = mean_std(results[gname][method][K_ref_idx], 'r_steady')
@@ -285,8 +281,10 @@ for col in range(3):
     axes[2, col].set_xlabel('coupling K')
 fig.suptitle(f'sparsification error vs K ({n_seeds} seeds, q={q})')
 plt.tight_layout()
-plt.savefig('seed_sweep.png', dpi=120)
-print('\nsaved seed_sweep.png')
+plots_dir = Path('plots')
+plots_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(plots_dir / 'seed_sweep.png', dpi=120)
+print('\nsaved plots/seed_sweep.png')
 
 def seed_curves(gname, method, key):
     """one K-curve per seed."""
@@ -297,19 +295,16 @@ def seed_curves(gname, method, key):
     ]
 
 
-# per-graph panels: r, ψ, and lock/drift errors
-fig2, axes2 = plt.subplots(8, 2, figsize=(11, 20), sharex=True)
+# per-graph panels: time-averaged r, ψ, and lock/drift errors
 by_graph_specs = [
-    (0, 'r_mean', 'time-averaged |Δr|'),
-    (1, 'r_steady', 'steady-state |Δr|'),
-    (2, 'psi_mean', 'time-averaged |Δψ| (°)'),
-    (3, 'psi_steady', 'steady-state |Δψ| (°)'),
-    (4, 'f_drift_mean', 'time-averaged |Δf_drift|'),
-    (5, 'f_drift_steady', 'steady-state |Δf_drift|'),
-    (6, 'r_lock_mean', 'time-averaged |Δr_lock|'),
-    (7, 'r_drift_mean', 'time-averaged |Δr_drift|'),
+    ('r_mean', 'time-averaged |Δr|'),
+    ('psi_mean', 'time-averaged |Δψ| (°)'),
+    ('f_drift_mean', 'time-averaged |Δf_drift|'),
+    ('r_lock_mean', 'time-averaged |Δr_lock|'),
+    ('r_drift_mean', 'time-averaged |Δr_drift|'),
 ]
-for row, key, ylabel in by_graph_specs:
+fig2, axes2 = plt.subplots(len(by_graph_specs), 2, figsize=(11, 2.5 * len(by_graph_specs)), sharex=True)
+for row, (key, ylabel) in enumerate(by_graph_specs):
     for col, gname in enumerate(graphs):
         ax = axes2[row, col]
         for method in methods:
@@ -328,9 +323,9 @@ for row, key, ylabel in by_graph_specs:
         ax.set_ylabel(ylabel)
         if row == 0:
             ax.legend()
-axes2[7, 0].set_xlabel('coupling K')
-axes2[7, 1].set_xlabel('coupling K')
+axes2[-1, 0].set_xlabel('coupling K')
+axes2[-1, 1].set_xlabel('coupling K')
 fig2.suptitle(f'effective resistance vs weight-based by graph ({n_seeds} seeds, q={q})')
 plt.tight_layout()
-plt.savefig('seed_sweep_by_graph.png', dpi=120)
-print('saved seed_sweep_by_graph.png')
+plt.savefig(plots_dir / 'seed_sweep_by_graph.png', dpi=120)
+print('saved plots/seed_sweep_by_graph.png')

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
@@ -183,5 +185,7 @@ ax.set_title(
 ax.set_ylim(0, 1.05)
 ax.legend()
 plt.tight_layout()
-plt.savefig("K_sweep.png", dpi=120)
+plots_dir = Path('plots')
+plots_dir.mkdir(parents=True, exist_ok=True)
+plt.savefig(plots_dir / 'K_sweep.png', dpi=120)
 plt.show()

@@ -2,6 +2,8 @@
 Kuramoto comparison animation. Run after kuramoto.py has set up the system:
     python animate_kuramoto.py
 """
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -11,12 +13,14 @@ from kuramoto import (
     N, A, A_sparse_ER, omega,
     sol_full, sol_ER, t_eval,
     edges_from_A, top_weight_edges,
-    K, k_over_n, q, random_weights_std, edge_density, A_name,
+    K, k_over_n, q, random_weights_std, edge_density, A_name, ring_k,
 )
 
 
 def _A_extra():
     parts = []
+    if A_name.startswith('A_ring'):
+        parts.append(f'k={ring_k}')
     if 'random' in A_name:
         if 'edges' in A_name:
             parts.append(f'edge density={edge_density}')
@@ -44,6 +48,8 @@ anim_blit = True
 
 L = int(np.sqrt(N))
 R = 0.35
+RING_R = L / 2
+USE_RING_LAYOUT = A_name.startswith('A_ring')
 norm = plt.Normalize(omega.min(), omega.max())
 ball_colors = plt.cm.viridis(norm(omega))
 
@@ -67,6 +73,21 @@ rows = np.arange(N) // L
 cols = np.arange(N) % L
 
 
+def nodes_xy(indices):
+    idx = np.asarray(indices)
+    if USE_RING_LAYOUT:
+        ang = 2 * np.pi * idx / N - np.pi / 2
+        return RING_R * np.cos(ang), RING_R * np.sin(ang)
+    return (idx % L).astype(float), -(idx // L).astype(float)
+
+
+def panel_limits():
+    if USE_RING_LAYOUT:
+        pad = R + 0.5
+        return (-RING_R - pad, RING_R + pad), (-RING_R - pad, RING_R + pad)
+    return (-0.6, L - 0.4), (-L + 0.4, 0.6)
+
+
 def aligned_edge_lists(A_full, A_sparse, max_edges):
     """
     top-weight edges per graph; sparse list first in both panels, then full-only.
@@ -83,27 +104,20 @@ def aligned_edge_lists(A_full, A_sparse, max_edges):
     return (ei_s, ej_s), (np.concatenate([ei_s, ei_fo]), np.concatenate([ej_s, ej_fo]))
 
 
-def pos(i):
-    c, r = divmod(i, L)
-    return c, -r
-
-
 def edge_segments(ei, ej):
-    c1, r1 = ei % L, ei // L
-    c2, r2 = ej % L, ej // L
-    x1, y1 = c1, -r1
-    x2, y2 = c2, -r2
+    x1, y1 = nodes_xy(ei)
+    x2, y2 = nodes_xy(ej)
     dx, dy = x2 - x1, y2 - y1
-    d = np.hypot(dx, dy)
+    d = np.maximum(np.hypot(dx, dy), 1e-12)
     p1 = np.column_stack([x1 + R * dx / d, y1 + R * dy / d])
     p2 = np.column_stack([x2 - R * dx / d, y2 - R * dy / d])
     return np.stack([p1, p2], axis=1)
 
 
 def ball_offsets(sol):
-    # (N, T, 2) — one scatter update per frame instead of N circle patches
+    cx, cy = nodes_xy(np.arange(N))
     return np.stack(
-        (cols[:, None] + R * np.cos(sol), -rows[:, None] + R * np.sin(sol)),
+        (cx[:, None] + R * np.cos(sol), cy[:, None] + R * np.sin(sol)),
         axis=-1,
     )
 
@@ -131,6 +145,7 @@ ax_f, ax_s, ax_d = axes[0]
 ax_zf, ax_zs, ax_rd = axes[1]
 
 panels = []
+_xlim, _ylim = panel_limits()
 for ax, A_mat, ei, ej, balls, sol_sub, title in [
     (ax_f, A, ei_f, ej_f, ball_f, sol_f, 'full'),
     (ax_s, A_sparse_ER, ei_s, ej_s, ball_s, sol_s, 'sparse'),
@@ -138,8 +153,8 @@ for ax, A_mat, ei, ej, balls, sol_sub, title in [
     ax.set_aspect('equal')
     ax.axis('off')
     ax.set_title(title)
-    ax.set_xlim(-0.6, L - 0.4)
-    ax.set_ylim(-L + 0.4, 0.6)
+    ax.set_xlim(*_xlim)
+    ax.set_ylim(*_ylim)
     n_total = len(edges_from_A(A_mat)[0])
     ax.text(
         0.5, -0.04,
@@ -147,8 +162,8 @@ for ax, A_mat, ei, ej, balls, sol_sub, title in [
         transform=ax.transAxes, ha='center', va='top', fontsize=9,
     )
     for i in range(N):
-        c, r = pos(i)
-        ax.add_patch(plt.Circle((c, r), R, fill=False, ec='k', lw=0.8))
+        x, y = nodes_xy(i)
+        ax.add_patch(plt.Circle((x, y), R, fill=False, ec='k', lw=0.8))
     lc = LineCollection(
         edge_segments(ei, ej), linewidths=0.1, cmap='coolwarm', clim=(-1, 1), zorder=1,
     )
@@ -243,7 +258,9 @@ ani = FuncAnimation(
     fig, update, frames=anim_frames, interval=anim_interval_ms, blit=anim_blit,
 )
 plt.tight_layout(rect=[0, 0, 1, 0.94])
-gif_path = f'sparse_kuramoto_{A_name.removeprefix("A_")}.gif'
+plots_dir = Path('plots')
+plots_dir.mkdir(parents=True, exist_ok=True)
+gif_path = plots_dir / f'sparse_kuramoto_{A_name.removeprefix("A_")}.gif'
 ani.save(gif_path, writer='pillow', fps=1000 // anim_interval_ms)
 print(f'saved {gif_path}')
 plt.show()

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -54,8 +55,41 @@ W = rng.lognormal(0, random_weights_std, (N, N)) # mean, std, shape, lognormal i
 W = (W + W.T) / 2; np.fill_diagonal(W, 0) # symmetrize and set diagonal to 0
 A_random_weights = (np.ones((N, N)) - np.eye(N)) * W   # FC conncetivity, random strengths
 
+def generate_ring_matrix(N, k):
+    # Create the offsets for k nearest neighbors in both directions
+    offsets = list(range(1, k + 1))
 
-A = A_random_weights  # A_fc, A_square, A_random_weights, A_random_edges, A_random_edges_weights
+
+    # Generate the circulant graph for the ring
+    G = nx.circulant_graph(N, offsets)
+    
+    # Get the adjacency matrix as a dense NumPy array
+    adj_matrix = nx.to_numpy_array(G, dtype=int) 
+    
+    return adj_matrix
+
+# k = 212.5 is k_c for sync (Wiley et al.); use smaller k for faster runs
+ring_k = 10
+A_ring = generate_ring_matrix(N, ring_k)
+
+
+ei_ring, ej_ring = np.where(np.triu(A_ring, 1))
+A_ring_heterogeneous = np.zeros((N, N))
+w_ring = rng.lognormal(0, random_weights_std, len(ei_ring))
+A_ring_heterogeneous[ei_ring, ej_ring] = w_ring
+A_ring_heterogeneous[ej_ring, ei_ring] = w_ring
+
+
+d = np.minimum(np.abs(ei_ring - ej_ring), N - np.abs(ei_ring - ej_ring))
+w_ring_falloff = 1.0 / d
+A_ring_falloff = np.zeros((N, N))
+A_ring_falloff[ei_ring, ej_ring] = w_ring_falloff
+A_ring_falloff[ej_ring, ei_ring] = w_ring_falloff
+
+
+A = A_ring_falloff  # A_fc, A_square, A_random_weights, A_random_edges, A_random_edges_weights
+
+
 
 A_matrices_names = {
     'A_fc': A_fc,
@@ -63,9 +97,16 @@ A_matrices_names = {
     'A_random_weights': A_random_weights,
     'A_random_edges': A_random_edges,
     'A_random_edges_weights': A_random_edges_weights,
+    'A_ring': A_ring,
+    'A_ring_heterogeneous': A_ring_heterogeneous,
+    'A_ring_falloff': A_ring_falloff,
 }
 
 A_name = next(name for name, mat in A_matrices_names.items() if mat is A)
+
+
+
+
 
 def effective_resistance_sparsification(A, q, rng=None):
     if rng is None:
@@ -110,8 +151,11 @@ def weight_based_sparsification(A, q, rng=None): # only using edge weights, not 
     return sparsified_matrix
 
 
-#loc is the mean, scale is the standard deviation
-omega = rng.normal(loc=5.0, scale=0.5, size=N) # Intrinsic frequencies
+# identical ω for ring (Wiley et al. twist analysis); spread ω otherwise
+if A_name in ('A_ring', 'A_ring_heterogeneous'):
+    omega = np.full(N, 5.0)
+else:
+    omega = rng.normal(loc=5.0, scale=0.5, size=N)
 
 sparsify_rng = np.random.default_rng(RUN_SEED + 1)
 A_sparse_ER= effective_resistance_sparsification(A, q, sparsify_rng)
@@ -223,7 +267,9 @@ if __name__ == "__main__" and bool_plots:
     ax_dpsi.set_xlabel('time (s)')
     ax_dpsi.legend(title='sparsify')
 
-    plt.savefig('kuramoto.png', dpi=120)
+    plots_dir = Path('plots')
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(plots_dir / 'kuramoto.png', dpi=120)
     fig.tight_layout()
     plt.show()
 
