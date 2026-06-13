@@ -106,8 +106,6 @@ A_name = next(name for name, mat in A_matrices_names.items() if mat is A)
 
 
 
-
-
 def effective_resistance_sparsification(A, q, rng=None):
     if rng is None:
         rng = np.random.default_rng()
@@ -148,6 +146,46 @@ def weight_based_sparsification(A, q, rng=None): # only using edge weights, not 
         w = we[k] / (s * pe[k])
         sparsified_matrix[edge_i[k], edge_j[k]] += w
         sparsified_matrix[edge_j[k], edge_i[k]] += w
+    return sparsified_matrix
+
+
+def ring_farthest_sparsification(A, q, rng=None):
+    # keep the k/2 neighbor shells farthest from the center (distances > k//2)
+    N = A.shape[0]
+    ei, ej = np.where(np.triu(A, 1))
+    d = np.minimum(np.abs(ei - ej), N - np.abs(ei - ej))
+    k_max = int(d.max())
+    keep = d > k_max // 2
+    sparsified_matrix = np.zeros((N, N))
+    sparsified_matrix[ei[keep], ej[keep]] = A[ei[keep], ej[keep]]
+    sparsified_matrix[ej[keep], ei[keep]] = A[ej[keep], ei[keep]]
+    return sparsified_matrix
+
+def ring_every_other_sparsification(A, q, rng=None):
+    # keep even-distance shells only (2, 4, 6, ...); no distance-1 edges
+    N = A.shape[0]
+    ei, ej = np.where(np.triu(A, 1))
+    d = np.minimum(np.abs(ei - ej), N - np.abs(ei - ej))
+    k_max = int(d.max())
+    keep_distances = set(range(2, k_max + 1, 2))
+    keep = np.isin(d, list(keep_distances))
+    sparsified_matrix = np.zeros((N, N))
+    sparsified_matrix[ei[keep], ej[keep]] = A[ei[keep], ej[keep]]
+    sparsified_matrix[ej[keep], ei[keep]] = A[ej[keep], ei[keep]]
+    return sparsified_matrix
+
+
+def ring_odd_sparsification(A, q, rng=None):
+    # keep odd-distance shells only (1, 3, 5, ...); couples even ↔ odd, not within parity
+    N = A.shape[0]
+    ei, ej = np.where(np.triu(A, 1))
+    d = np.minimum(np.abs(ei - ej), N - np.abs(ei - ej))
+    k_max = int(d.max())
+    keep_distances = set(range(1, k_max + 1, 2))
+    keep = np.isin(d, list(keep_distances))
+    sparsified_matrix = np.zeros((N, N))
+    sparsified_matrix[ei[keep], ej[keep]] = A[ei[keep], ej[keep]]
+    sparsified_matrix[ej[keep], ei[keep]] = A[ej[keep], ei[keep]]
     return sparsified_matrix
 
 

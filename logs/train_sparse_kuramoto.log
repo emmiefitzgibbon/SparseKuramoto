@@ -1,0 +1,22 @@
+run seed: 2314267767377204148
+N=64 | full edges=2016 | budget=504 (Q=0.25)
+integrating full-graph validation target (euler)...
+integrating full-graph display target (dopri5)...
+epoch    0 | train loss 1.3880e-01 | val loss 1.3582e-01 | active edges 504/504 | lr 0.0100
+epoch   20 | train loss 8.7130e-02 | val loss 1.1418e-01 | active edges 504/504 | lr 0.0099
+epoch   40 | train loss 6.4070e-02 | val loss 1.0792e-01 | active edges 504/504 | lr 0.0096
+epoch   60 | train loss 5.9194e-02 | val loss 1.1550e-01 | active edges 504/504 | lr 0.0091
+epoch   80 | train loss 5.2613e-02 | val loss 1.1339e-01 | active edges 504/504 | lr 0.0084
+epoch  100 | train loss 4.7396e-02 | val loss 9.4153e-02 | active edges 504/504 | lr 0.0076
+epoch  120 | train loss 4.5865e-02 | val loss 9.1527e-02 | active edges 504/504 | lr 0.0067
+epoch  140 | train loss 4.7759e-02 | val loss 1.0413e-01 | active edges 504/504 | lr 0.0057
+epoch  160 | train loss 4.4752e-02 | val loss 9.5162e-02 | active edges 504/504 | lr 0.0047
+epoch  180 | train loss 4.4801e-02 | val loss 9.2621e-02 | active edges 504/504 | lr 0.0037
+epoch  200 | train loss 4.6242e-02 | val loss 1.0108e-01 | active edges 504/504 | lr 0.0028
+epoch  220 | train loss 4.3356e-02 | val loss 9.7954e-02 | active edges 504/504 | lr 0.0020
+epoch  240 | train loss 4.2508e-02 | val loss 8.9177e-02 | active edges 504/504 | lr 0.0014
+epoch  260 | train loss 4.2188e-02 | val loss 9.8268e-02 | active edges 504/504 | lr 0.0009
+epoch  280 | train loss 4.2183e-02 | val loss 1.0009e-01 | active edges 504/504 | lr 0.0006
+epoch  299 | train loss 4.1408e-02 | val loss 9.9660e-02 | active edges 504/504 | lr 0.0005
+best epoch 240 | val loss 8.9177e-02
+saved checkpoint plots/sparse_train/best_raw_n=64_q=0.25.pt, dashboard plots/sparse_train/dashboard_n=64_q=0.25.png, network plot plots/sparse_train/reduced_network_n=64_q=0.25.png

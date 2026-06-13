@@ -1,7 +1,10 @@
 """
-Kuramoto comparison animation. Run after kuramoto.py has set up the system:
-    python animate_kuramoto.py
+Kuramoto comparison animation.
+
+    python animate_kuramoto.py           # after kuramoto.py
+    python animate_kuramoto.py adaptive  # after adaptive_sparsify_kuramoto.py
 """
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -9,12 +12,26 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.collections import LineCollection
 
-from kuramoto import (
-    N, A, A_sparse_ER, omega,
-    sol_full, sol_ER, t_eval,
-    edges_from_A, top_weight_edges,
-    K, k_over_n, q, random_weights_std, edge_density, A_name, ring_k,
-)
+ADAPTIVE_MODE = len(sys.argv) > 1 and sys.argv[1] == 'adaptive'
+
+if ADAPTIVE_MODE:
+    from adaptive_sparsify_kuramoto import (
+        N, A, A_sparse_ER, omega,
+        sol_full, sol_ER, t_eval,
+        edges_from_A, top_weight_edges,
+        K, k_over_n, q, A_name,
+        resparsify_every, A_snapshots,
+    )
+    random_weights_std = None
+    edge_density = None
+    ring_k = None
+else:
+    from kuramoto import (
+        N, A, A_sparse_ER, omega,
+        sol_full, sol_ER, t_eval,
+        edges_from_A, top_weight_edges,
+        K, k_over_n, q, random_weights_std, edge_density, A_name, ring_k,
+    )
 
 
 def _A_extra():
@@ -32,10 +49,15 @@ def _A_extra():
 def param_summary():
     n_full = len(edges_from_A(A)[0])
     n_sparse = len(edges_from_A(A_sparse_ER)[0])
+    sparse_line = (
+        f'sparse: adaptive ER q={q}  refresh={resparsify_every}  ({n_sparse:,} edges now)'
+        if ADAPTIVE_MODE
+        else f'sparse: ER q={q}  ({n_sparse:,} edges)'
+    )
     return '\n'.join([
         f'N={N}  K={K:.2g} (k/N={k_over_n})',
         f'full: {A_name}{_A_extra()}  ({n_full:,} edges)',
-        f'sparse: ER q={q}  ({n_sparse:,} edges)',
+        sparse_line,
     ])
 
 # perf knobs — subsample solved trajectory; don't re-integrate
@@ -44,7 +66,7 @@ t_end_ref = 5.0
 sim_dt_per_frame = t_end_ref / anim_frames_base
 anim_max_edges = 1500
 anim_interval_ms = 50
-anim_blit = True
+anim_blit = not ADAPTIVE_MODE
 
 L = int(np.sqrt(N))
 R = 0.35
@@ -135,6 +157,23 @@ def unit_circle_offsets(sol):
 ball_f = ball_offsets(sol_f)
 ball_s = ball_offsets(sol_s)
 
+sparse_snap_data = None
+snap_at_anim = None
+if ADAPTIVE_MODE:
+    snap_t_indices = np.array([s['t_idx'] for s in A_snapshots], dtype=int)
+    snap_at_anim = np.searchsorted(snap_t_indices, frame_idx, side='right') - 1
+    sparse_snap_data = []
+    for snap in A_snapshots:
+        ei_snap, ej_snap, _ = top_weight_edges(snap['A'], anim_max_edges)
+        sol_snap = sol_s[:, :]  # same trajectory; edges change with snapshot
+        sparse_snap_data.append({
+            'ei': ei_snap,
+            'ej': ej_snap,
+            'segs': edge_segments(ei_snap, ej_snap),
+            'sin': edge_sin(sol_snap, ei_snap, ej_snap),
+            'n_total': len(edges_from_A(snap['A'])[0]),
+        })
+
 fig, axes = plt.subplots(
     2, 3, figsize=(13, 8.8),
     gridspec_kw={'height_ratios': [2.2, 0.9], 'width_ratios': [1, 1, 1.4]},
@@ -146,6 +185,7 @@ ax_zf, ax_zs, ax_rd = axes[1]
 
 panels = []
 _xlim, _ylim = panel_limits()
+sparse_edge_txt = None
 for ax, A_mat, ei, ej, balls, sol_sub, title in [
     (ax_f, A, ei_f, ej_f, ball_f, sol_f, 'full'),
     (ax_s, A_sparse_ER, ei_s, ej_s, ball_s, sol_s, 'sparse'),
@@ -156,22 +196,35 @@ for ax, A_mat, ei, ej, balls, sol_sub, title in [
     ax.set_xlim(*_xlim)
     ax.set_ylim(*_ylim)
     n_total = len(edges_from_A(A_mat)[0])
-    ax.text(
+    edge_txt = ax.text(
         0.5, -0.04,
         f'{n_total:,} edges ({len(ei):,} shown)',
         transform=ax.transAxes, ha='center', va='top', fontsize=9,
     )
+    if title == 'sparse':
+        sparse_edge_txt = edge_txt
     for i in range(N):
         x, y = nodes_xy(i)
         ax.add_patch(plt.Circle((x, y), R, fill=False, ec='k', lw=0.8))
-    lc = LineCollection(
-        edge_segments(ei, ej), linewidths=0.1, cmap='coolwarm', clim=(-1, 1), zorder=1,
-    )
-    ax.add_collection(lc)
-    sc = ax.scatter(
-        balls[:, 0, 0], balls[:, 0, 1], s=18, c=ball_colors, zorder=3, edgecolors='none',
-    )
-    panels.append((lc, sc, edge_sin(sol_sub, ei, ej), balls))
+    if ADAPTIVE_MODE and title == 'sparse':
+        snap0 = sparse_snap_data[0]
+        lc = LineCollection(
+            snap0['segs'], linewidths=0.1, cmap='coolwarm', clim=(-1, 1), zorder=1,
+        )
+        ax.add_collection(lc)
+        sc = ax.scatter(
+            balls[:, 0, 0], balls[:, 0, 1], s=18, c=ball_colors, zorder=3, edgecolors='none',
+        )
+        panels.append((lc, sc, snap0['sin'], balls, True))
+    else:
+        lc = LineCollection(
+            edge_segments(ei, ej), linewidths=0.1, cmap='coolwarm', clim=(-1, 1), zorder=1,
+        )
+        ax.add_collection(lc)
+        sc = ax.scatter(
+            balls[:, 0, 0], balls[:, 0, 1], s=18, c=ball_colors, zorder=3, edgecolors='none',
+        )
+        panels.append((lc, sc, edge_sin(sol_sub, ei, ej), balls, False))
 
 op_panels = []
 for ax, z_t, sol_sub, title in [
@@ -227,8 +280,16 @@ err_txt = ax_d.text(0.02, 0.95, '', transform=ax_d.transAxes, va='top')
 
 def update(k):
     artists = []
-    for lc, sc, s_all, balls in panels:
-        s = s_all[:, k]
+    for lc, sc, s_all, balls, adaptive_edges in panels:
+        if adaptive_edges:
+            snap = sparse_snap_data[snap_at_anim[k]]
+            lc.set_segments(snap['segs'])
+            s = snap['sin'][:, k]
+            sparse_edge_txt.set_text(
+                f'{snap["n_total"]:,} edges ({len(snap["ei"]):,} shown)',
+            )
+        else:
+            s = s_all[:, k]
         lc.set_array(s)
         lc.set_linewidths(0.1 + 1.9 * np.abs(s))
         artists.append(lc)
@@ -260,7 +321,8 @@ ani = FuncAnimation(
 plt.tight_layout(rect=[0, 0, 1, 0.94])
 plots_dir = Path('plots')
 plots_dir.mkdir(parents=True, exist_ok=True)
-gif_path = plots_dir / f'sparse_kuramoto_{A_name.removeprefix("A_")}.gif'
+tag = 'adaptive' if ADAPTIVE_MODE else A_name.removeprefix('A_')
+gif_path = plots_dir / f'sparse_kuramoto_{tag}.gif'
 ani.save(gif_path, writer='pillow', fps=1000 // anim_interval_ms)
 print(f'saved {gif_path}')
 plt.show()
